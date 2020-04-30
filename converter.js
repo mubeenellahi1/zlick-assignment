@@ -13,25 +13,25 @@ const convertedPrices = async (data) => {
 }
 
 const submitTransactions = async () => {
-  const promises = [];
-  let transactions;
-  let promises2;
+  const transactionPromises = [];
 
-  //Adding all requests in a promises array
+  //Adding all transaction requests in a promises array
   for (let i = 0; i < numOfTransactions; i++) {
-    promises.push(axios.get(config.getUrl));
+    transactionPromises.push(axios.get(config.getUrl));
   }
 
-  //After resolving all promises
-  const axiosAllResponse = await axios.all(promises);
-  promises2 = axiosAllResponse.map(response => convertedPrices(response.data));
+  //Waiting for all transaction requests to resolve
+  const transactions = await axios.all(transactionPromises);
 
-  //After getting converted prices
-  const axiosAllPromises2 = await axios.all(promises2);
-  transactions = axiosAllPromises2.map(d => d);
+  //Added all exchange rate requests in a promises array
+  const exchangeRatePromises = transactions.map(response => convertedPrices(response.data));
 
-  //submitting converted ammounts
-  const axiosSubmissionResponse = await axios.post(config.postUrl, { transactions });
+  //Waiting for all exhange rate requests to resolve
+  const convertedTransactions = (await axios.all(exchangeRatePromises));
+
+
+  //Submitting converted ammounts
+  const axiosSubmissionResponse = await axios.post(config.postUrl, { "transactions":convertedTransactions });
   console.log(axiosSubmissionResponse.data);
 }
 
