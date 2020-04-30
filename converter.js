@@ -1,59 +1,38 @@
 const axios = require('axios');
+const config = require('./config');
+const numOfTransactions = parseInt(process.argv[2], 10);
 
-let num_of_transactions = parseInt(process.argv[2])
-let exchange_url = "https://api.exchangeratesapi.io/"
-let get_url = "https://7np770qqk5.execute-api.eu-west-1.amazonaws.com/prod/get-transaction"
-let post_url = "https://7np770qqk5.execute-api.eu-west-1.amazonaws.com/prod/process-transactions"
-
-
-function converted_prices(data){
-    url = exchange_url + data.createdAt.slice(0,4) + '-'+ data.createdAt.slice(5,7) + '-'+ data.createdAt.slice(8,10) + "?base=EUR"
-    return axios.get(url).then(res =>{
-        return {
-            "createdAt": data.createdAt,
-            "currency": data.currency,
-            "convertedAmount": parseFloat((data.amount / res.data.rates[data.currency]).toFixed(4)),
-            "checksum": data.checksum
-        }
-    })
-    
+const convertedPrices = async (data) => {
+  const url = `${config.exchangeUrl}${new Date(data.createdAt).toISOString().substring(0, 10)}?base=EUR`;
+  return {
+    createdAt: data.createdAt,
+    currency: data.currency,
+    convertedAmount: parseFloat((data.amount / (await axios.get(url)).data.rates[data.currency]).toFixed(4)),
+    checksum: data.checksum,
+  };
 }
 
-function transactions(){
+const submitTransactions = async () => {
+  const promises = [];
+  let transactions;
+  let promises2;
 
-    transactions = []
-    promises = []
-    promises2 = []
+  //Adding all requests in a promises array
+  for (let i = 0; i < numOfTransactions; i++) {
+    promises.push(axios.get(config.getUrl));
+  }
 
-    //Adding all requests in a promises array
-    for (var i = 0; i < num_of_transactions; i++) {
-        promises.push(axios.get(get_url))
-    }
-    
-    //After resolving all promises
-    axios.all(promises).then(axios.spread((...responses) => {
-        transactions = []
+  //After resolving all promises
+  const axiosAllResponse = await axios.all(promises);
+  promises2 = axiosAllResponse.map(response => convertedPrices(response.data));
 
-        responses.forEach(response => {
-            promises2.push(converted_prices(response.data))    
-        })
+  //After getting converted prices
+  const axiosAllPromises2 = await axios.all(promises2);
+  transactions = axiosAllPromises2.map(d => d);
 
-        //After getting converted prices
-        axios.all(promises2).then(axios.spread((...responses2)=>{
-            responses2.forEach(res => {
-                transactions.push(res)
-            });
-
-            //submitting converted ammounts
-            axios.post(post_url,{"transactions":transactions}).then(function(response){
-                console.log(response.data)
-            })
-            
-        }))
-
-    }))
+  //submitting converted ammounts
+  const axiosSubmissionResponse = await axios.post(config.postUrl, { transactions });
+  console.log(axiosSubmissionResponse.data);
 }
 
-
-transactions()
-
+submitTransactions();
